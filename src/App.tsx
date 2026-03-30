@@ -10,6 +10,10 @@ import { motion, AnimatePresence } from 'motion/react';
 // Building mapping
 const BUILDING_LEGEND: Record<string, string> = {
   'M': 'Main Building',
+  'U': 'University Hall',
+  'UH': 'University Hall',
+  'UHALL': 'University Hall',
+  'U-HALL': 'University Hall',
   'SOM': 'School of Management',
   'PSB': 'Professional Schools Building',
   'IS': 'IS',
@@ -19,6 +23,7 @@ const BUILDING_LEGEND: Record<string, string> = {
   'ISFIELD': 'IS Building Field',
   'PSBFIELD': 'Professionals School Building Field',
   'T.B.A.': 'To be announced',
+  'TBA': 'To be announced',
   'B': 'Main Building B',
 };
 
@@ -39,8 +44,8 @@ export default function App() {
 
     const upperInput = input.trim().toUpperCase();
     
-    // Regex to split: Prefix (Letters/Dots) + Room Number (Digits) + optional Suffix (Letters)
-    const match = upperInput.match(/^([A-Z.]+)(\d*)([A-Z]*)$/);
+    // Regex to split: Prefix (Letters/Dots/Hyphens) + Room Number (Digits) + optional Suffix (Letters)
+    const match = upperInput.match(/^([A-Z.-]+)(\d*)([A-Z]*)$/);
     
     if (!match) return null;
 
@@ -64,9 +69,11 @@ export default function App() {
       buildingName = `${buildingName} (Wing ${suffix})`;
     }
 
-    // Floor logic (only if digits exist)
+    // Floor logic
     let floor = 'N/A';
-    if (digits) {
+    if (buildingName === 'University Hall') {
+      floor = '5th Floor';
+    } else if (digits) {
       const floorDigit = digits.charAt(0);
       let floorSuffix = 'th';
       if (floorDigit === '1') floorSuffix = 'st';
