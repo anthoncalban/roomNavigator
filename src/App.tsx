@@ -3,11 +3,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
-import { Search, Info, MapPin, Layers, Users, Package, Armchair, Compass, Sparkles, ChevronRight, Building } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Home as HomeIcon, Search, Info, MapPin, Layers, Users, Package, Armchair, ChevronRight, Building, BookOpen, Settings, School } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { campusService } from './services/campusService';
+import { NEUCampus, ExpandedRoom, RoomDetail } from './types';
+import { DirectoryView } from './components/DirectoryView';
+import { AdminView } from './components/AdminView';
+import { LoginView } from './components/LoginView';
+import { HomeView } from './components/HomeView';
+import { CollegesView } from './components/CollegesView';
+import { Hammer, AlertTriangle, CheckCircle } from 'lucide-react';
 
-// Building mapping
+// Building mapping - Fallback for search
 const BUILDING_LEGEND: Record<string, string> = {
   'M': 'Main Building',
   'U': 'University Hall',
@@ -22,13 +30,13 @@ const BUILDING_LEGEND: Record<string, string> = {
   'MFIELD': 'Main Building Field',
   'ISFIELD': 'IS Building Field',
   'PSBFIELD': 'Professionals School Building Field',
-  'T.B.A.': 'To be announced',
-  'TBA': 'To be announced',
+  'T.B.A.': 'To Be Announced',
+  'TBA': 'To Be Announced',
   'B': 'Main Building B',
   'SHOP': 'Workshop/Shop Area',
 };
 
-// Specific room details and descriptions
+// Existing room details (Full restoration)
 const ROOM_DETAILS: Record<string, { name: string; description?: string; floor?: string }> = {
   'M101': { name: 'Computer Laboratory 1' },
   'M102': { name: 'Computer Laboratory 2' },
@@ -47,11 +55,11 @@ const ROOM_DETAILS: Record<string, { name: string; description?: string; floor?:
   'M117': { name: 'Biology Laboratory' },
   'M120': { name: 'DISD / New CSD Office', description: 'Digital Infrastructure & Service Department. This is the NEW location.' },
   'M121': { name: 'Old CSD Office', description: 'This is the OLD location. The office has moved to M120.' },
-  'M124': { name: 'COA & Dean\'s Office', description: 'College of Engineering and Architecture' },
+  'M124': { name: 'CEA & Dean\'s Office', description: 'College of Engineering and Architecture' },
   'M128': { name: 'Engineering Laboratory Workshop', description: 'Engineering Facility' },
-  'M132': { name: 'Surveying Laboratory', description: 'Engineering Facility' },
-  'M133': { name: 'Civil Engineering Technology Laboratory', description: 'Engineering Facility' },
-  'M134': { name: 'Fluid Mechanics & Hydraulics Laboratory', description: 'Engineering Facility' },
+  'M132': { name: 'Surveying Laboratory', description: 'Engineering Facility. SHOP 2' },
+  'M133': { name: 'Civil Engineering Technology Laboratory', description: 'Engineering Facility. SHOP 3' },
+  'M134': { name: 'Fluid Mechanics & Hydraulics Laboratory', description: 'Engineering Facility. SHOP 4' },
   'M240': { name: 'Nursing Arts Laboratory', floor: '2nd Floor' },
   'M226': { name: 'Short Stay Surgical Unit (SSSU)', floor: '2nd Floor' },
   'M241': { name: 'College of Nursing Faculty Room (CON)', floor: '2nd Floor' },
@@ -85,7 +93,7 @@ const ROOM_DETAILS: Record<string, { name: string; description?: string; floor?:
   'M422': { name: 'Forensic Ballistics Laboratory', floor: '4th Floor' },
   'M421': { name: 'Lie Detection and Interrogation Room', floor: '4th Floor' },
   'M420': { name: 'Questioned Documents and Dactyloscopy', floor: '4th Floor' },
-  'M418': { name: 'College of Criminology', floor: '4th Floor' },
+  'M418': { name: 'College of Criminology (COC)', floor: '4th Floor' },
   'M417': { name: 'Criminology Student Society Office', floor: '4th Floor' },
   'M434': { name: 'Office of Student Affairs and Services (OSAS)', floor: '4th Floor' },
   'M415': { name: 'CICS Department', floor: '4th Floor' },
@@ -93,17 +101,8 @@ const ROOM_DETAILS: Record<string, { name: string; description?: string; floor?:
   'SHOP5': { name: 'Construction Matls. and Testing Laboratory', description: 'Engineering Facility' },
 };
 
-// Special named locations
-const SPECIAL_LOCATIONS: Record<string, { 
-  code: string; 
-  building: string; 
-  floor: string; 
-  name: string; 
-  abbreviation: string; 
-  description?: string;
-  inventory?: string[];
-  capacity?: string;
-}> = {
+// Special named locations (Full restoration)
+const SPECIAL_LOCATIONS: Record<string, any> = {
   'MESS HALL': { code: 'MESS HALL', building: 'Main Building', floor: 'Ground Floor', name: 'NEU Main Canteen', abbreviation: 'M' },
   'CANTEEN': { code: 'CANTEEN', building: 'Main Building', floor: 'Ground Floor', name: 'NEU Mess Hall', abbreviation: 'M' },
   'ROTC': { code: 'ROTC OFFICE', building: 'Main Building', floor: 'Under Main Stage', name: 'ROTC Office', abbreviation: 'M', description: 'Located under the main building stage' },
@@ -126,24 +125,35 @@ const SPECIAL_LOCATIONS: Record<string, {
   'NEU BASKETBALL GYM': { code: '4TH FLOOR', building: 'Main Building', floor: '4th Floor', name: 'NEU Basketball Gym', abbreviation: 'M', inventory: ['Court', 'Bench'], capacity: '' },
   'BASKETBALL GYM': { code: '4TH FLOOR', building: 'Main Building', floor: '4th Floor', name: 'NEU Basketball Gym', abbreviation: 'M', inventory: ['Court', 'Bench'], capacity: '' },
   'SECRET GARDEN': { code: 'BESIDE MAIN', building: 'Main Building', floor: 'Ground', name: 'Secret Garden', abbreviation: 'M', description: 'Beside Main Building' },
+  'CICS': { code: 'M415', building: 'Main Building', floor: '4th Floor', name: 'CICS Department', abbreviation: 'M' },
+  'CEA': { code: 'M124', building: 'Main Building', floor: '1st Floor', name: 'College of Engineering and Architecture', abbreviation: 'M' },
+  'TBA': { code: 'TBA', building: 'University-wide', floor: 'N/A', name: 'To Be Announced', abbreviation: 'TBA', description: 'Location is yet to be announced' },
+  'CASHIER': { code: 'CASHIER', building: 'Main Building', floor: '2nd Floor', name: 'Cashier', abbreviation: 'M', description: 'Located at the second floor of Main Building' },
 };
 
-interface ExpandedRoom {
-  code: string;
-  name: string;
-  building: string;
-  floor: string;
-  room: string;
-  abbreviation: string;
-  capacity: string;
-  inventory: string[];
-  chairCount: number | null;
-  description?: string;
-}
+type ViewMode = 'home' | 'search' | 'directory' | 'colleges' | 'admin';
 
 export default function App() {
+  const [viewMode, setViewMode] = useState<ViewMode>('home');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [input, setInput] = useState('');
-  const [recent, setRecent] = useState<string[]>(['SOM201', 'B234', 'MPH5', 'T.B.A.', 'M120']);
+  const [campusData, setCampusData] = useState<NEUCampus>(campusService.getCampusData());
+  const [rooms, setRooms] = useState<RoomDetail[]>(campusService.getRooms());
+  const [recent, setRecent] = useState<string[]>(['SOM201', 'M415', 'M124', 'PSB101', 'M120']);
+
+  const refreshData = () => {
+    setCampusData(campusService.getCampusData());
+    setRooms(campusService.getRooms());
+  };
+
+  useEffect(() => {
+    refreshData();
+  }, []);
+
+  const selectRoomFromDirectory = (code: string) => {
+    setInput(code);
+    setViewMode('search');
+  };
 
   const results = useMemo((): ExpandedRoom[] => {
     if (!input.trim()) return [];
@@ -152,85 +162,54 @@ export default function App() {
     const foundResults: ExpandedRoom[] = [];
 
     // Helper to build a room object
-    const buildRoom = (code: string, prefix: string, digits: string, suffix: string, buildingName: string): ExpandedRoom => {
-      const fullCode = code;
-      const roomDetail = ROOM_DETAILS[fullCode] || ROOM_DETAILS[prefix + digits];
+    const buildRoom = (code: string, prefix: string, digits: string, suffix: string, defaultBuilding: string): ExpandedRoom => {
+      // Check if room exists in dynamic rooms first
+      const dynamicRoom = rooms.find(r => r.code.toUpperCase() === code.toUpperCase() || (prefix + digits).toUpperCase() === r.code.toUpperCase());
+      const roomDetail = ROOM_DETAILS[code] || ROOM_DETAILS[prefix + digits];
       
-      let roomName = roomDetail ? roomDetail.name : `Room ${digits || suffix || code}`;
+      const buildingFromService = campusData.buildings.find(b => b.code === prefix) || 
+                                campusData.buildings.find(b => b.name === (dynamicRoom?.buildingCode || defaultBuilding));
+      
+      const buildingName = buildingFromService ? buildingFromService.name : (dynamicRoom?.buildingCode || defaultBuilding);
+
+      let roomName = dynamicRoom?.name || roomDetail?.name || `Room ${digits || suffix || code}`;
       let finalBuildingName = buildingName;
       
-      // Special handling for trailing 'B' if not already in a 'B' building
       if (suffix === 'B' && prefix !== 'B') {
         finalBuildingName = `${finalBuildingName} (Building B)`;
-      } else if (suffix && !roomDetail) {
-        finalBuildingName = `${finalBuildingName} (Wing ${suffix})`;
       }
 
-      // Floor logic
-      let floor = 'N/A';
-      if (roomDetail?.floor) {
-        floor = roomDetail.floor;
-      } else if (buildingName === 'University Hall') {
-        floor = '5th Floor';
-      } else if (digits) {
-        const floorDigit = digits.charAt(0);
-        let floorSuffix = 'th';
-        if (floorDigit === '1') floorSuffix = 'st';
-        else if (floorDigit === '2') floorSuffix = 'nd';
-        else if (floorDigit === '3') floorSuffix = 'rd';
-        floor = `${floorDigit}${floorSuffix} Floor`;
-      }
-
-      // Capacity and Inventory logic
-      let capacity = '30-40';
-      let inventory = ['Chairs', 'Whiteboard', 'Projector'];
-      let chairCount: number | null = 40 + (Math.floor(Math.random() * 21));
-
-      if (roomDetail?.description) {
-        inventory = [roomDetail.description, ...inventory];
-      }
-
-      if (buildingName === 'To be announced' || roomName.includes('Office') || roomName.includes('Department')) {
-        capacity = '';
-        inventory = roomDetail?.description ? [roomDetail.description] : [];
-        chairCount = null;
-      } else if (buildingName.includes('Field')) {
-        capacity = '200+';
-        inventory = ['Open Space', 'Goal Posts', 'Bleachers'];
-        chairCount = null;
-      } else if (buildingName.includes('Hall') || buildingName.includes('Canteen') || buildingName.includes('Mess Hall')) {
-        capacity = buildingName === 'University Hall' ? '40-50' : '100-150';
-        inventory = buildingName === 'University Hall' 
-          ? ['Chairs', 'Whiteboard', 'Projector'] 
-          : ['Folding Chairs', 'Sound System', 'Stage'];
-        chairCount = null;
-      } else if (digits) {
-        const roomNum = parseInt(digits);
-        if (!isNaN(roomNum)) {
-          const baseCap = 20 + (roomNum % 30);
-          capacity = `${baseCap}`;
-          inventory = ['Chairs', 'Whiteboard'];
-          if (roomNum % 2 === 0) inventory.push('Projector');
-          if (roomNum % 5 === 0) inventory.push('Air Conditioning');
-          chairCount = 40 + (roomNum % 21);
+      let floor = dynamicRoom?.floor || 'N/A';
+      if (floor === 'N/A') {
+        if (roomDetail?.floor) {
+          floor = roomDetail.floor;
+        } else if (digits) {
+          const floorDigit = digits.charAt(0);
+          let floorSfx = 'th';
+          if (floorDigit === '1') floorSfx = 'st';
+          else if (floorDigit === '2') floorSfx = 'nd';
+          else if (floorDigit === '3') floorSfx = 'rd';
+          floor = `${floorDigit}${floorSfx} Floor`;
         }
       }
 
       return {
-        code: code,
+        code: dynamicRoom?.code || code,
         name: roomName,
         building: finalBuildingName,
-        floor: floor,
+        floor,
         room: digits || 'N/A',
-        abbreviation: prefix,
-        capacity,
-        inventory,
-        chairCount,
-        description: roomDetail?.description
+        abbreviation: prefix || dynamicRoom?.buildingCode || 'N/A',
+        capacity: dynamicRoom?.capacity || '30-40',
+        inventory: dynamicRoom?.description ? [dynamicRoom.description] : (roomDetail?.description ? [roomDetail.description, 'Chairs', 'Whiteboard'] : ['Chairs', 'Whiteboard', 'Projector']),
+        chairCount: 40,
+        description: dynamicRoom?.description || roomDetail?.description,
+        isUnderMaintenance: dynamicRoom?.isUnderMaintenance,
+        maintenanceMessage: dynamicRoom?.maintenanceMessage
       };
     };
 
-    // 1. Check special locations (keywords)
+    // 1. Check special locations
     for (const [key, loc] of Object.entries(SPECIAL_LOCATIONS)) {
       if (upperInput.includes(key) || key.includes(upperInput)) {
         foundResults.push({
@@ -248,384 +227,386 @@ export default function App() {
       }
     }
 
-    // 2. Check room details (names and descriptions)
+    // 2. Check dynamic rooms from service
+    rooms.forEach(r => {
+      const matchCode = r.code.toUpperCase().includes(upperInput);
+      const matchName = r.name.toUpperCase().includes(upperInput);
+      const matchDesc = r.description?.toUpperCase().includes(upperInput);
+      
+      if (matchCode || matchName || matchDesc) {
+        if (!foundResults.some(res => res.code === r.code)) {
+          const m = r.code.match(/^([A-Z]+)(\d*)([A-Z]*)$/);
+          if (m) {
+            foundResults.push(buildRoom(r.code, m[1], m[2], m[3], r.buildingCode || 'Unknown Building'));
+          } else {
+            foundResults.push(buildRoom(r.code, '', '', '', r.buildingCode || 'Unknown Building'));
+          }
+        }
+      }
+    });
+
+    // 3. Check legacy ROOM_DETAILS (Search by name and description)
     for (const [code, detail] of Object.entries(ROOM_DETAILS)) {
-      if (detail.name.toUpperCase().includes(upperInput) || detail.description?.toUpperCase().includes(upperInput)) {
-        // Avoid duplicates from special locations
+      const matchName = detail.name.toUpperCase().includes(upperInput);
+      const matchDesc = detail.description?.toUpperCase().includes(upperInput);
+      if (matchName || matchDesc || code === upperInput) {
         if (!foundResults.some(r => r.code === code)) {
-          const match = code.match(/^([A-Z.-]+)(\d*)([A-Z]*)$/);
-          if (match) {
-            const [_, prefix, digits, suffix] = match;
-            const bName = BUILDING_LEGEND[prefix] || 'Main Building';
-            foundResults.push(buildRoom(code, prefix, digits, suffix, bName));
+          const m = code.match(/^([A-Z]+)(\d*)([A-Z]*)$/);
+          if (m) {
+            foundResults.push(buildRoom(code, m[1], m[2], m[3], BUILDING_LEGEND[m[1]] || 'Main Building'));
+          } else {
+            // Non-standard code, still try to build
+            foundResults.push(buildRoom(code, 'M', '', '', 'Main Building'));
           }
         }
       }
     }
 
-    // 3. Check room code regex
+    // 4. Check campusData
+    campusData.buildings.forEach(b => {
+      if (b.name.toUpperCase().includes(upperInput) || b.code === upperInput) {
+        if (!foundResults.some(r => r.code === b.code)) {
+          foundResults.push(buildRoom(b.code, b.code, '', '', b.name));
+        }
+      }
+      b.colleges.forEach(c => {
+        if (c.name.toUpperCase().includes(upperInput) || c.id === upperInput) {
+          if (c.deanOffice) {
+             const match = c.deanOffice.match(/^([A-Z]+)(\d*)([A-Z]*)$/);
+             if (match && !foundResults.some(r => r.code === c.deanOffice)) {
+               foundResults.push(buildRoom(c.deanOffice, match[1], match[2], match[3], b.name));
+             }
+          }
+        }
+      });
+    });
+
+    // 5. Regex match
     const match = upperInput.match(/^([A-Z.-]+)(\d*)([A-Z]*)$/);
     if (match) {
       let [_, prefix, digits, suffix] = match;
-      let buildingName = BUILDING_LEGEND[prefix + digits] || BUILDING_LEGEND[prefix];
-      
-      if (buildingName) {
-        const code = upperInput;
-        if (!foundResults.some(r => r.code === code)) {
-          foundResults.push(buildRoom(code, prefix, digits, suffix, buildingName));
-        }
+      let buildingName = BUILDING_LEGEND[prefix] || 'New Building';
+      const code = upperInput;
+      if (!foundResults.some(r => r.code === code)) {
+        foundResults.push(buildRoom(code, prefix, digits, suffix, buildingName));
       }
     }
 
-    // Deduplicate results by code
     return Array.from(new Map(foundResults.map(item => [item.code, item])).values());
-  }, [input]);
+  }, [input, campusData, rooms]);
 
   const expanded = results.length === 1 ? results[0] : null;
 
   return (
-    <div className="min-h-screen flex flex-col items-center selection:bg-amber-100 selection:text-amber-900 overflow-x-hidden bg-[#FDF8F1]">
-      {/* Playful Background Decoration - Enhanced Vintage */}
-      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
-        <motion.div 
-          animate={{ 
-            scale: [1, 1.1, 1],
-            rotate: [0, 45, 0],
-            x: [0, 30, 0]
-          }}
-          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-          className="absolute -top-[10%] -left-[10%] w-[60%] h-[60%] rounded-full bg-[#8B5E3C]/5 blur-[120px]" 
-        />
-        <motion.div 
-          animate={{ 
-            scale: [1, 1.2, 1],
-            rotate: [0, -30, 0],
-            y: [0, 50, 0]
-          }}
-          transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-          className="absolute top-[20%] -right-[10%] w-[50%] h-[50%] rounded-full bg-[#D4A373]/5 blur-[100px]" 
-        />
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[80%] h-[40%] bg-[#E9D8A6]/5 blur-[120px]" />
-      </div>
-
-      <main className="w-full max-w-2xl px-4 py-6 md:px-6 md:py-20">
-        {/* Header Section */}
-        <header className="mb-6 md:mb-12 text-center">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.5, rotate: -10 }}
-            animate={{ opacity: 1, scale: 1, rotate: 0 }}
-            className="inline-flex items-center gap-3 mb-4 md:mb-8 px-4 py-2 md:px-5 md:py-2.5 bg-white/80 rounded-full shadow-xl shadow-amber-900/5 border border-amber-100 backdrop-blur-sm"
-          >
-            <div className="p-1.5 md:p-2 bg-[#8B5E3C] rounded-full">
-              <MapPin className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" />
+    <div className="min-h-screen flex flex-col md:flex-row bg-[#FDFDFD] selection:bg-neu-gold/20 selection:text-neu-navy">
+      {/* Sidebar Navigation - Desktop */}
+      <nav className="hidden md:flex w-72 flex-col navy-gradient text-white p-8 relative overflow-hidden shrink-0">
+        <div className="absolute top-20 -left-10 rail-text text-8xl text-white/10 select-none">
+          NEU NAVIGATOR
+        </div>
+        
+        <div className="relative z-10 flex flex-col h-full">
+          <div className="flex items-center gap-3 mb-12">
+            <div className="w-10 h-10 bg-neu-gold rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(255,215,0,0.3)]">
+              <MapPin className="w-5 h-5 text-neu-navy" />
             </div>
-            <span className="text-[10px] md:text-sm font-extrabold uppercase tracking-[0.2em] text-[#8B5E3C]">NEU Campus Navigator</span>
-          </motion.div>
-          
-          <motion.h1 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1, type: "spring", stiffness: 100 }}
-            className="text-4xl md:text-7xl font-black tracking-tight text-[#4A3728] leading-[0.95]"
-          >
-            Find your <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#8B5E3C] via-[#A67C52] to-[#D4A373]">spot.</span>
-          </motion.h1>
-        </header>
-
-        {/* Search Interface */}
-        <section className="relative mb-8 md:mb-12 group">
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="absolute -inset-2 bg-gradient-to-r from-[#8B5E3C] via-[#D4A373] to-[#E9D8A6] rounded-[32px] md:rounded-[40px] opacity-10 blur-2xl group-focus-within:opacity-20 transition-opacity" 
-          />
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Where are we going? (e.g. SOM201, M328, Library)"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              className="w-full h-20 md:h-24 px-6 md:px-10 bg-white/90 rounded-[28px] md:rounded-[32px] shadow-2xl border-2 border-amber-50 focus:outline-none focus:border-[#8B5E3C] transition-all text-xl md:text-2xl font-bold placeholder:text-amber-200 text-[#4A3728] input-glow backdrop-blur-md"
-              autoFocus
-            />
-            <div className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 flex items-center gap-4">
-              <motion.button 
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                className="w-12 h-12 md:w-14 md:h-14 bg-[#8B5E3C] rounded-xl md:rounded-2xl flex items-center justify-center text-white shadow-lg shadow-amber-900/20"
-              >
-                <Search className="w-5 h-5 md:w-6 md:h-6" />
-              </motion.button>
+            <div>
+              <h1 className="text-xl font-black tracking-tight leading-none uppercase">NEU</h1>
+              <p className="text-[10px] font-black tracking-widest text-neu-gold/60 uppercase">Navigator</p>
             </div>
           </div>
-        </section>
 
-        {/* Results Area */}
-        <div className="min-h-[450px]">
-          <AnimatePresence mode="wait">
-            {results.length > 0 ? (
-              expanded ? (
-                <motion.div
-                  key="result"
-                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, y: -20 }}
-                  className="grid grid-cols-1 md:grid-cols-6 gap-5"
+          <div className="space-y-2">
+            {[
+              { id: 'home', label: 'Dashboard', icon: HomeIcon },
+              { id: 'search', label: 'Quick Search', icon: Search },
+              { id: 'directory', label: 'Directory', icon: BookOpen },
+              { id: 'colleges', label: 'Colleges', icon: School },
+              { id: 'admin', label: 'Management', icon: Settings },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setViewMode(tab.id as ViewMode)}
+                className={`w-full flex items-center gap-4 p-4 rounded-2xl text-sm font-bold transition-all duration-300 ${
+                  viewMode === tab.id 
+                    ? 'bg-white/15 text-white shadow-lg backdrop-blur-md' 
+                    : 'text-white/60 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <tab.icon className={`w-5 h-5 ${viewMode === tab.id ? 'text-neu-gold' : ''}`} />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-auto pt-8 border-t border-white/10">
+            <p className="text-[9px] font-bold text-white/30 uppercase tracking-[0.2em] mb-4">Popular Spots</p>
+            <div className="space-y-1">
+              {recent.slice(0, 4).map(spot => (
+                <button
+                  key={spot}
+                  onClick={() => { setInput(spot); setViewMode('search'); }}
+                  className="w-full text-left p-2 rounded-lg text-xs font-medium text-white/50 hover:bg-white/5 hover:text-white transition-all"
                 >
-                  {/* Main Card */}
-                  <div className="md:col-span-4 glass-card rounded-[24px] md:rounded-[40px] p-6 md:p-10 flex flex-col justify-between min-h-[220px] md:min-h-[320px] relative overflow-hidden group border border-amber-100 bg-white/60 backdrop-blur-md">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-[#8B5E3C]/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:bg-[#8B5E3C]/10 transition-colors" />
-                    
-                    <div className="relative z-10">
-                      <div className="inline-flex items-center gap-1.5 md:gap-2 mb-2 md:mb-6 px-2.5 py-0.5 md:px-3 md:py-1 bg-amber-50 rounded-full">
-                        <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#8B5E3C] animate-pulse" />
-                        <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest text-[#8B5E3C]">Location Found</span>
-                      </div>
-                      <h2 className="text-5xl md:text-8xl font-black tracking-tighter text-[#4A3728] mb-1 md:mb-4 leading-none">{expanded.code}</h2>
-                      <p className="text-lg md:text-2xl text-[#8B5E3C] font-bold tracking-tight leading-tight">{expanded.name}</p>
-                      <p className="text-sm md:text-base text-amber-800/60 font-medium uppercase tracking-widest mt-1">{expanded.building}</p>
-                      {expanded.description && (
-                        <p className="mt-4 text-sm md:text-base text-amber-800/60 font-medium italic">{expanded.description}</p>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-center gap-4 mt-6 md:mt-10 relative z-10">
-                      <div className="px-4 py-2 md:px-6 md:py-3 bg-[#8B5E3C] text-white rounded-lg md:rounded-2xl text-[10px] md:text-xs font-black uppercase tracking-widest shadow-lg shadow-amber-900/20">
-                        {expanded.abbreviation}
-                      </div>
-                      <div className="h-1.5 flex-1 bg-amber-100/50 rounded-full overflow-hidden">
-                        <motion.div 
-                          initial={{ x: "-100%" }}
-                          animate={{ x: "0%" }}
-                          className="h-full bg-[#8B5E3C]" 
-                        />
-                      </div>
+                  {spot}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Mobile Header */}
+      <header className="md:hidden flex items-center justify-between p-6 navy-gradient text-white">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-neu-gold rounded-xl flex items-center justify-center">
+            <MapPin className="w-4 h-4 text-neu-navy" />
+          </div>
+          <h1 className="text-lg font-black tracking-tight uppercase">NEU Navigator</h1>
+        </div>
+        <button onClick={() => setViewMode('admin')} className="p-2 bg-white/10 rounded-lg">
+          <Settings className="w-5 h-5" />
+        </button>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="flex-1 p-6 md:p-12 overflow-y-auto min-h-0">
+        <div className={`mx-auto w-full ${viewMode === 'home' ? 'max-w-6xl' : 'max-w-4xl'}`}>
+          <AnimatePresence mode="wait">
+            {viewMode === 'home' && (
+              <motion.div key="home" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+                <HomeView 
+                  onStartSearch={() => setViewMode('search')} 
+                  onViewDirectory={() => setViewMode('directory')}
+                  featuredBuildings={campusData.buildings}
+                />
+              </motion.div>
+            )}
+
+            {viewMode === 'search' && (
+              <motion.div 
+                key="search" 
+                initial={{ opacity: 0, y: 20 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-8"
+              >
+                {/* Search Bar Section */}
+                <div className="relative group">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-neu-navy to-neu-gold opacity-5 group-hover:opacity-15 blur-2xl transition duration-1000 group-hover:duration-200"></div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Where are you headed?"
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      className="w-full h-16 md:h-24 px-8 md:px-12 bg-white rounded-[32px] shadow-[0_10px_40px_rgba(0,0,0,0.03)] border-2 border-slate-100 focus:outline-none focus:border-neu-navy transition-all text-xl md:text-3xl font-black text-slate-800 input-glow"
+                      autoFocus
+                    />
+                    <div className="absolute right-4 md:right-6 top-1/2 -translate-y-1/2 p-3 md:p-4 bg-neu-navy rounded-[24px] text-white shadow-xl shadow-neu-navy/20">
+                      <Search className="w-6 h-6 md:w-8 md:h-8" />
                     </div>
                   </div>
+                </div>
 
-                  {/* Info Bento Items */}
-                  <div className="md:col-span-2 flex flex-col gap-3 md:gap-5">
-                    {/* Mobile Compact View */}
-                    <div className="flex flex-wrap gap-2 md:hidden">
-                      <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md rounded-full border border-amber-100 shadow-sm">
-                        <Layers className="w-3.5 h-3.5 text-[#8B5E3C]" />
-                        <span className="text-[10px] font-black text-amber-800/60 uppercase tracking-tight">Lvl:</span>
-                        <span className="text-xs font-black text-[#4A3728]">{expanded.floor}</span>
-                      </div>
-                      {expanded.capacity && (
-                        <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md rounded-full border border-amber-200/20 shadow-sm">
-                          <Users className="w-3.5 h-3.5 text-[#A67C52]" />
-                          <span className="text-[10px] font-black text-amber-800/60 uppercase tracking-tight">Cap:</span>
-                          <span className="text-xs font-black text-[#4A3728]">{expanded.capacity}</span>
-                        </div>
-                      )}
-                    </div>
+                {results.length > 0 ? (
+                  expanded ? (
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+                      {/* Main Room Card - Large Bento Box */}
+                      <div className="md:col-span-8 bento-card border-none navy-gradient text-white flex flex-col justify-between min-h-[300px] md:min-h-[400px]">
+                        <div>
+                          <div className="flex items-center gap-2 text-neu-gold/60 text-[10px] md:text-xs font-black uppercase tracking-[0.3em] mb-4">
+                            <Layers className="w-3 h-3" /> {expanded.building} • {expanded.floor}
+                          </div>
+                          
+                          {expanded.isUnderMaintenance && (
+                            <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-500/20 backdrop-blur-md rounded-full border border-red-500/30 mb-4">
+                              <Hammer className="w-3 h-3 text-red-500" />
+                              <span className="text-[10px] font-black uppercase tracking-wider text-red-100">Under Maintenance</span>
+                            </div>
+                          )}
 
-                    {/* Desktop Bento View */}
-                    <div className="hidden md:flex md:flex-col gap-5">
-                      <motion.div 
-                        whileHover={{ y: -5 }}
-                        className="glass-card rounded-[40px] p-8 flex flex-col justify-between bg-gradient-to-br from-white to-amber-50/30 border border-amber-100"
-                      >
-                        <div className="w-12 h-12 rounded-2xl bg-amber-100/50 flex items-center justify-center">
-                          <Layers className="w-6 h-6 text-[#8B5E3C]" />
+                          <h2 className="text-7xl md:text-9xl font-black tracking-tighter leading-none mb-4">{expanded.code}</h2>
                         </div>
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-amber-800/40 mb-1">Level</p>
-                          <p className="text-3xl font-black text-[#4A3728]">{expanded.floor}</p>
-                        </div>
-                      </motion.div>
-                      {expanded.capacity && (
-                        <motion.div 
-                          whileHover={{ y: -5 }}
-                          className="glass-card rounded-[40px] p-8 flex flex-col justify-between bg-gradient-to-br from-white to-amber-100/10 border border-amber-100"
-                        >
-                          <div className="w-12 h-12 rounded-2xl bg-amber-100/50 flex items-center justify-center">
-                            <Users className="w-6 h-6 text-[#A67C52]" />
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-amber-800/40 mb-1">Capacity</p>
-                            <p className="text-3xl font-black text-[#4A3728]">{expanded.capacity} pax</p>
-                          </div>
-                        </motion.div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Chairs & Inventory */}
-                  <div className="md:col-span-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      {expanded.chairCount !== null && (
-                        <motion.div 
-                          whileHover={{ scale: 1.02 }}
-                          className="glass-card rounded-[40px] p-8 flex items-center gap-6 bg-gradient-to-r from-white to-amber-50/20 border border-amber-100"
-                        >
-                          <div className="w-16 h-16 rounded-3xl bg-amber-100/50 flex items-center justify-center">
-                            <Armchair className="w-8 h-8 text-[#8B5E3C]" />
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-amber-800/40 mb-1">Seating</p>
-                            <p className="text-3xl font-black text-[#4A3728]">{expanded.chairCount} Chairs</p>
-                          </div>
-                        </motion.div>
-                      )}
-                      
-                      {expanded.inventory.length > 0 && (
-                        <motion.div 
-                          whileHover={{ scale: 1.02 }}
-                          className="glass-card rounded-[40px] p-8 flex flex-col gap-6 bg-gradient-to-r from-white to-amber-50/20 border border-amber-100"
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-amber-100/50 flex items-center justify-center">
-                              <Package className="w-6 h-6 text-[#A67C52]" />
+                          <p className="text-2xl md:text-4xl font-bold text-white mb-2">{expanded.name}</p>
+                          {expanded.description && (
+                            <p className="text-white/60 text-sm md:text-base max-w-md italic mb-4">{expanded.description}</p>
+                          )}
+                          
+                          {expanded.isUnderMaintenance && expanded.maintenanceMessage && (
+                            <div className="p-4 bg-black/20 rounded-xl border border-white/5 flex items-start gap-3">
+                              <AlertTriangle className="w-5 h-5 text-neu-gold shrink-0 mt-0.5" />
+                              <div>
+                                <p className="text-[10px] font-black uppercase text-neu-gold/60 tracking-widest mb-1">Notice</p>
+                                <p className="text-sm text-white/80">{expanded.maintenanceMessage}</p>
+                              </div>
                             </div>
-                            <h3 className="text-sm font-black uppercase tracking-widest text-[#4A3728]">Inventory</h3>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {expanded.inventory.map((item, idx) => (
-                              <span 
-                                key={idx}
-                                className="px-4 py-2 bg-white rounded-xl text-xs font-bold text-amber-800/70 shadow-sm border border-amber-50"
-                              >
-                                {item}
-                              </span>
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </div>
-                  </div>
+                          )}
+                        </div>
+                      </div>
 
-                  {/* Legend Tip */}
-                  <div className="md:col-span-6 bg-[#4A3728] rounded-[24px] md:rounded-[40px] p-6 md:p-10 flex flex-col gap-4 md:gap-6 text-white overflow-hidden relative group">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-[#8B5E3C]/20 rounded-full -translate-y-1/2 translate-x-1/2 blur-[80px] group-hover:bg-[#8B5E3C]/30 transition-colors" />
-                    
-                    <div className="relative z-10 flex items-center gap-4 md:gap-6">
-                      <div className="w-10 h-10 md:w-14 md:h-14 rounded-lg md:rounded-2xl bg-white/10 flex items-center justify-center">
-                        <Info className="w-5 h-5 md:w-6 md:h-6 text-amber-200" />
+                      {/* Stats Column */}
+                      <div className="md:col-span-4 flex flex-col gap-5">
+                        <div className="bento-card flex-1 flex flex-col justify-center items-center text-center">
+                          <div className="p-3 bg-neu-blue-pale rounded-2xl mb-4">
+                            <Users className="w-6 h-6 text-neu-navy" />
+                          </div>
+                          <p className="text-4xl font-black text-slate-800">{expanded.capacity}</p>
+                          <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mt-1">Capacity / Pax</p>
+                        </div>
+                        <div className="bento-card flex-1 bg-neu-gold p-6 relative overflow-hidden group">
+                           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full translate-x-10 -translate-y-10" />
+                           <p className="text-[10px] font-black uppercase text-neu-navy/40 mb-3 tracking-widest relative z-10 text-center">Inventory</p>
+                           <div className="flex flex-wrap justify-center gap-2 relative z-10">
+                             {expanded.inventory.map((it, idx) => (
+                               <span key={idx} className="px-3 py-1 bg-neu-navy/10 backdrop-blur-sm rounded-lg text-[10px] font-black text-neu-navy uppercase">
+                                 {it}
+                               </span>
+                             ))}
+                           </div>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-[10px] text-amber-200/40 font-black uppercase tracking-widest mb-0.5 md:mb-1">Quick Legend</p>
-                        <p className="text-sm md:text-xl font-bold">
-                          <span className="text-amber-200 font-black">{expanded.abbreviation}</span> is {expanded.building}
-                        </p>
+
+                      {/* Wide Bottom Card */}
+                      <div className="md:col-span-12 bento-card bg-slate-50 border-dashed border-2 flex items-center justify-between p-8">
+                         <div className="flex items-center gap-6">
+                            <div className="p-4 bg-white rounded-2xl shadow-sm">
+                              <MapPin className="w-6 h-6 text-neu-navy" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Building Reference</p>
+                              <p className="text-xl font-bold text-slate-700">{expanded.abbreviation} - {expanded.building}</p>
+                            </div>
+                         </div>
+                         <button 
+                          onClick={() => setInput('')}
+                          className="px-6 py-3 bg-white text-neu-navy text-xs font-black uppercase tracking-widest rounded-full shadow-sm hover:shadow-md transition-all"
+                         >
+                            New Search
+                         </button>
                       </div>
                     </div>
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="results-list"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="grid grid-cols-1 gap-4"
-                >
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-1.5 h-6 bg-[#8B5E3C] rounded-full" />
-                    <h3 className="text-sm font-black uppercase tracking-widest text-amber-800/40">Found {results.length} results</h3>
-                  </div>
-                  {results.map((res) => (
-                    <motion.button
-                      key={res.code}
-                      whileHover={{ x: 10 }}
-                      onClick={() => setInput(res.code)}
-                      className="w-full p-6 bg-white/80 rounded-[24px] border border-amber-50 shadow-sm hover:shadow-md transition-all text-left flex items-center justify-between group backdrop-blur-sm"
-                    >
-                      <div>
-                        <p className="text-2xl font-black text-[#4A3728] group-hover:text-[#8B5E3C] transition-colors">{res.code}</p>
-                        <p className="text-sm font-bold text-[#8B5E3C]">{res.name}</p>
-                        <p className="text-xs font-bold text-amber-800/60 uppercase tracking-widest">{res.building}</p>
-                        {res.description && (
-                          <p className="text-xs text-amber-800/40 italic mt-1">{res.description}</p>
-                        )}
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2 flex items-center gap-3 px-2">
+                        <div className="w-1 h-4 bg-neu-navy rounded-full" />
+                        <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Search Matches</h3>
                       </div>
-                      <div className="px-4 py-2 bg-amber-50/50 rounded-xl text-[10px] font-black uppercase tracking-widest text-[#8B5E3C] group-hover:bg-[#8B5E3C] group-hover:text-white transition-colors">
-                        {res.floor}
-                      </div>
-                    </motion.button>
-                  ))}
-                </motion.div>
-              )
-            ) : input.trim() ? (
-              <motion.div
-                key="not-found"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="flex flex-col items-center justify-center py-24 text-center"
-              >
-                <div className="w-24 h-24 bg-amber-50 rounded-[40px] flex items-center justify-center mb-8 rotate-12">
-                  <Search className="w-10 h-10 text-amber-200" />
-                </div>
-                <h3 className="text-3xl font-black text-[#4A3728] mb-4">Oops! No spot found.</h3>
-                <p className="text-amber-800/60 max-w-xs text-lg font-medium">We couldn't find that room code. Double check the building abbreviation!</p>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="empty"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-16"
-              >
-                {/* Quick Access */}
-                <div>
-                  <div className="flex items-center gap-3 mb-6 md:mb-8">
-                    <div className="w-1.5 h-5 md:w-2 md:h-6 bg-[#8B5E3C] rounded-full" />
-                    <h3 className="text-[10px] md:text-sm font-black uppercase tracking-widest text-amber-800/40">Popular Spots</h3>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 md:gap-5">
-                    {recent.map((code) => (
-                      <motion.button
-                        key={code}
-                        whileHover={{ y: -8, scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => setInput(code)}
-                        className="group p-6 md:p-8 bg-white/80 rounded-[32px] md:rounded-[40px] border-2 border-transparent shadow-xl hover:shadow-2xl hover:border-amber-100 transition-all text-left relative overflow-hidden backdrop-blur-sm"
-                      >
-                        <div className="absolute top-0 right-0 w-20 h-20 bg-amber-50 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:bg-amber-100 transition-colors" />
-                        <p className="text-2xl md:text-3xl font-black text-[#4A3728] group-hover:text-[#8B5E3C] transition-colors mb-1 md:mb-2 relative z-10">{code}</p>
-                        <p className="text-[10px] text-amber-800/40 font-bold uppercase tracking-widest relative z-10">Jump →</p>
-                      </motion.button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Visual Legend */}
-                <div>
-                  <div className="flex items-center gap-3 mb-6 md:mb-8">
-                    <div className="w-1.5 h-5 md:w-2 md:h-6 bg-[#A67C52] rounded-full" />
-                    <h3 className="text-[10px] md:text-sm font-black uppercase tracking-widest text-amber-800/40">Building Directory</h3>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 md:gap-5">
-                    {Object.entries(BUILDING_LEGEND)
-                      .filter(([abbr]) => ['M', 'PSB', 'SOM', 'IS'].includes(abbr))
-                      .map(([abbr, name]) => (
-                        <motion.div 
-                          key={abbr} 
-                          whileHover={{ scale: 1.05 }}
-                          className="p-4 md:p-6 bg-white/60 rounded-2xl md:rounded-3xl border border-amber-50 hover:bg-white hover:shadow-lg transition-all backdrop-blur-sm"
+                      {results.map((res, i) => (
+                        <motion.button 
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                          key={res.code} 
+                          onClick={() => setInput(res.code)} 
+                          className="bento-card flex items-center justify-between group"
                         >
-                          <p className="text-base md:text-lg font-black text-[#4A3728] mb-0.5 md:mb-1">{abbr}</p>
-                          <p className="text-[9px] md:text-[10px] text-amber-800/40 font-black uppercase truncate tracking-tighter">{name}</p>
-                        </motion.div>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-2xl font-black text-slate-800">{res.code}</p>
+                              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{res.name}</p>
+                            </div>
+                            
+                            {res.isUnderMaintenance && (
+                              <div className="flex items-center gap-1 px-2 py-0.5 bg-red-100 rounded-full">
+                                <Hammer className="w-3 h-3 text-red-500" />
+                                <span className="text-[8px] font-black text-red-600 uppercase tracking-tighter">Maint.</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center group-hover:bg-neu-navy group-hover:text-white transition-all">
+                            <ChevronRight className="w-5 h-5" />
+                          </div>
+                        </motion.button>
                       ))}
+                    </div>
+                  )
+                ) : input.trim() ? (
+                  <motion.div 
+                    initial={{ opacity: 0 }} 
+                    animate={{ opacity: 1 }} 
+                    className="py-24 text-center"
+                  >
+                    <div className="w-20 h-20 bg-slate-100 rounded-[32px] flex items-center justify-center mx-auto mb-6">
+                      <Search className="w-8 h-8 text-slate-300" />
+                    </div>
+                    <p className="text-xl font-black text-slate-300 uppercase tracking-[0.2em]">No spot found</p>
+                    <p className="text-slate-400 mt-2 text-sm">Check your room code and try again</p>
+                  </motion.div>
+                ) : (
+                  <div className="space-y-8">
+                    <div className="flex items-center gap-3 px-2">
+                      <div className="w-1 h-4 bg-neu-gold rounded-full" />
+                      <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Quick Picks</h4>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      {recent.map((spot, i) => (
+                        <motion.button 
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: i * 0.05 }}
+                          key={spot} 
+                          onClick={() => setInput(spot)} 
+                          className="p-6 bg-white border border-slate-100 rounded-[28px] font-black text-sm text-slate-600 hover:border-neu-navy hover:text-neu-navy transition-all shadow-[0_4px_20px_rgba(0,0,0,0.02)]"
+                        >
+                          {spot}
+                        </motion.button>
+                      ))}
+                      <div className="p-6 bg-neu-navy rounded-[28px] flex items-center justify-center col-span-2 text-white/40 font-black text-xs uppercase tracking-[0.3em]">
+                        Ready to Explore?
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
+              </motion.div>
+            )}
+
+            {viewMode === 'directory' && (
+              <motion.div key="directory" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                <DirectoryView campusData={campusData} onSelectRoom={selectRoomFromDirectory} />
+              </motion.div>
+            ) }
+
+            {viewMode === 'colleges' && (
+              <motion.div key="colleges" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                <CollegesView />
+              </motion.div>
+            ) }
+
+            {viewMode === 'admin' && (
+              <motion.div key="admin" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+                {isAuthenticated ? (
+                  <AdminView campusData={campusData} onRefresh={refreshData} onLogout={() => setIsAuthenticated(false)} />
+                ) : (
+                  <LoginView onLogin={(success) => setIsAuthenticated(success)} />
+                )}
               </motion.div>
             )}
           </AnimatePresence>
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="mt-auto py-16 text-center">
-        <div className="inline-flex items-center gap-3 px-6 py-3 bg-white/80 rounded-full shadow-sm border border-amber-100 backdrop-blur-sm">
-          <div className="w-2 h-2 rounded-full bg-[#8B5E3C] animate-pulse" />
-          <p className="text-[10px] font-black text-amber-800/40 uppercase tracking-[0.3em]">
-            NEU Campus Navigator
-          </p>
-        </div>
-      </footer>
+      {/* Mobile Nav */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex items-center justify-center gap-2 z-50">
+        {[
+          { id: 'home', label: 'Home', icon: HomeIcon },
+          { id: 'search', label: 'Search', icon: Search },
+          { id: 'directory', label: 'Dir', icon: BookOpen },
+          { id: 'colleges', label: 'Colleges', icon: School },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setViewMode(tab.id as ViewMode)}
+            className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-2xl transition-all ${
+              viewMode === tab.id ? 'text-neu-navy bg-neu-blue-pale' : 'text-slate-400'
+            }`}
+          >
+            <tab.icon className="w-5 h-5" />
+            <span className="text-[10px] font-bold uppercase tracking-wider">{tab.label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

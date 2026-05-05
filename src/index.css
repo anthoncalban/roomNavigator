@@ -5,34 +5,44 @@
   --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   
-  --color-brand-50: #f5f3ff;
-  --color-brand-100: #ede9fe;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;
-  --color-brand-700: #4338ca;
+  --color-neu-navy: #002D5A;
+  --color-neu-navy-dark: #001F3F;
+  --color-neu-navy-light: #004080;
+  --color-neu-gold: #FFD700;
+  --color-neu-gold-dark: #DAA520;
+  --color-neu-gold-light: #FFEC8B;
+  --color-neu-blue-pale: #F0F4F8;
   
   --color-accent-pink: #f43f5e;
   --color-accent-yellow: #f59e0b;
-  --color-accent-cyan: #06b6d4;
 }
 
 @layer base {
   body {
-    @apply antialiased text-slate-900 bg-[#F8FAFC];
+    @apply antialiased text-slate-900 bg-[#FDFDFD];
     font-family: 'Outfit', system-ui, -apple-system, sans-serif;
   }
 }
 
 .glass-card {
-  @apply bg-white/90 backdrop-blur-xl border border-white/40 shadow-[0_20px_50px_rgba(99,102,241,0.08)];
+  @apply bg-white border border-slate-200/60 shadow-[0_4px_20px_rgba(0,45,90,0.03)];
 }
 
-.floating-shadow {
-  @apply shadow-[0_30px_60px_-15px_rgba(0,0,0,0.1)];
+.bento-card {
+  @apply bg-white rounded-[32px] border border-slate-100 shadow-[0_8px_30px_rgba(0,45,90,0.04)] p-6 transition-all duration-300 hover:shadow-[0_20px_40px_rgba(0,45,90,0.08)] hover:-translate-y-1;
+}
+
+.navy-gradient {
+  background: linear-gradient(135deg, var(--color-neu-navy) 0%, var(--color-neu-navy-dark) 100%);
 }
 
 .input-glow:focus {
-  @apply shadow-[0_0_30px_rgba(99,102,241,0.15)];
+  @apply border-neu-navy shadow-[0_0_30px_rgba(0,45,90,0.08)];
+}
+
+.rail-text {
+  writing-mode: vertical-rl;
+  @apply uppercase tracking-[0.3em] font-black pointer-events-none opacity-5;
 }
 
 /* Smooth transitions */
