@@ -4,7 +4,7 @@ A **Progressive Web App (PWA)** designed to help freshmen, faculty, and visitors
 By entering a room code (e.g., `M410B`) into the search bar, the app instantly translates it into clear building, floor, and room information — complete with seating, capacity, and available facilities.  
 Beyond room codes, the app also provides **faculty directories, building guides, and popular spots** to make campus navigation simple and accessible.
 
-🔗 **Live Demo:** [NEU Campus Navigator](https://room-navigator.vercel.app/)
+🔗 **Live Demo:** [NEU Campus Navigator](https://campus-navigator-psi.vercel.app/)
 
 ---
 
